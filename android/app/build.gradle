@@ -1,0 +1,45 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace "com.example.secretary"
+    compileSdk 35 // FIX: Set compileSdkVersion to 35 (Android 15 preview, or latest stable)
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/tools/building/configure-builds/build-variants.html)
+        applicationId "com.example.secretary"
+        minSdkVersion 24 // Set minSdkVersion to 24 (Android 7.0 Nougat)
+        targetSdkVersion 35 //  FIX: Set targetSdkVersion to 35
+        // The Flutter Gradle plugin will automatically apply the version code and version name from your pubspec.yaml.
+        // No need to explicitly set them here using flutterVersionCode or flutterVersionName.
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    // Add any other dependencies here if needed
+}
