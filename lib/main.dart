@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart'; // Corrected import for permission_handler
+import 'package:permission_handler/permission_handler.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
-import 'package:speech_to_text/speech_to_text.dart'; // Import for STT
-import 'package:flutter_tts/flutter_tts.dart'; // Import for TTS
-import 'package:http/http.dart' as http; // Import for HTTP requests
-import 'dart:convert'; // Import for JSON encoding/decoding
-import 'dart:async'; // Required for TimeoutException
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:async';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,41 +21,38 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // MethodChannel for Call Detection
+  // MethodChannels
   static const MethodChannel _callMethodChannel = MethodChannel('com.example.secretary/call_state');
-  String _callStatus = "Waiting for phone permission...";
-
-  // MethodChannel for WhatsApp Message Detection
   static const MethodChannel _whatsappMethodChannel = MethodChannel('com.example.secretary/whatsapp_messages');
+  static const MethodChannel _accessibilityMethodChannel = MethodChannel('com.example.secretary/accessibility_service');
+
+  // Status variables
+  String _callStatus = "Waiting for phone permission...";
   String _whatsappStatus = "Waiting for notification access...";
   String _lastWhatsAppMessage = "No WhatsApp messages yet.";
-  String _lastWhatsAppAIResponse = "AI says (WhatsApp): ..."; // Added for WhatsApp AI response display
+  String _lastWhatsAppAIResponse = "AI says (WhatsApp): ...";
+  String _whatsappReplyStatus = "Waiting for reply...";
 
-  // MethodChannel for Accessibility Service communication
-  static const MethodChannel _accessibilityMethodChannel = MethodChannel('com.example.secretary/accessibility_service');
-  String _whatsappReplyStatus = "Waiting for reply..."; // Status of WhatsApp auto-reply
-
-  // STT and TTS instances
+  // STT and TTS
   final SpeechToText _speechToText = SpeechToText();
   final FlutterTts _flutterTts = FlutterTts();
   bool _speechEnabled = false;
   String _lastWords = '';
-  String _aiResponse = 'AI says: ...'; // For Call AI response
+  String _aiResponse = 'AI says: ...';
 
-  // FastAPI Backend URL (IMPORTANT: Replace with your deployed Render service URL)
-  final String _backendBaseUrl = 'https://secretary-ai-backend.onrender.com'; // Updated to your Render URL
-  
+  // Backend URL (update this to your deployment URL)
+  final String _backendBaseUrl = 'https://secretary-ai-backend.onrender.com';
+
   @override
   void initState() {
     super.initState();
-    _initSpeech(); // Initialize STT
-    _initTts();    // Initialize TTS
-
+    _initSpeech();
+    _initTts();
     _requestPhonePermission();
     _setupCallMethodChannel();
     _checkAndRequestNotificationAccess();
     _setupWhatsAppMethodChannel();
-    _setupAccessibilityMethodChannel(); // Setup listener for accessibility service status
+    _setupAccessibilityMethodChannel();
   }
 
   // --- STT Initialization ---
@@ -70,17 +67,17 @@ class _MyAppState extends State<MyApp> {
 
   // --- TTS Initialization ---
   void _initTts() async {
-    await _flutterTts.setLanguage("en-US"); // Set desired language
-    await _flutterTts.setSpeechRate(0.5); // Adjust speech rate
-    await _flutterTts.setVolume(1.0); // Set volume
-    await _flutterTts.setPitch(1.0); // Set pitch
+    await _flutterTts.setLanguage("en-US");
+    await _flutterTts.setSpeechRate(0.5);
+    await _flutterTts.setVolume(1.0);
+    await _flutterTts.setPitch(1.0);
     print('TTS Initialized');
   }
 
   // --- STT Methods ---
   void _startListening() async {
     if (_speechEnabled) {
-      _lastWords = ''; // Clear previous words
+      _lastWords = '';
       await _speechToText.listen(onResult: (result) {
         setState(() {
           _lastWords = result.recognizedWords;
@@ -99,12 +96,11 @@ class _MyAppState extends State<MyApp> {
   void _stopListening() async {
     await _speechToText.stop();
     setState(() {
-      _callStatus = 'Stopped listening.'; // Changed from _sttStatus
+      _callStatus = 'Stopped listening.';
     });
     print('STT Listening stopped.');
-    // Once stopped, send the transcribed text to the AI backend
     if (_lastWords.isNotEmpty) {
-      _sendCallTextToAI("SimulatedCaller", _lastWords); // Use a placeholder caller number for now
+      _sendCallTextToAI("SimulatedCaller", _lastWords);
     }
   }
 
@@ -124,12 +120,8 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _aiResponse = 'AI is thinking...';
     });
-    print('DEBUG CALL: Attempting to send call text to AI backend...');
     final url = Uri.parse('$_backendBaseUrl/process_call_audio');
-    print('DEBUG CALL: Target URL: $url');
-
     try {
-      print('DEBUG CALL: Making HTTP POST request for call...');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -137,34 +129,27 @@ class _MyAppState extends State<MyApp> {
           'caller_number': callerNumber,
           'transcribed_text': transcribedText,
         }),
-      ).timeout(const Duration(seconds: 60)); // Increased timeout to 60 seconds
-
-      print('DEBUG CALL: HTTP POST request completed. Status Code: ${response.statusCode}');
-
+      ).timeout(const Duration(seconds: 60));
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final String aiResponseText = data['ai_response'];
         setState(() {
           _aiResponse = 'AI says: "$aiResponseText"';
         });
-        print('AI Response for Call: $aiResponseText');
-        _speak(aiResponseText); // Speak the AI's response
+        _speak(aiResponseText);
       } else {
         setState(() {
           _aiResponse = 'AI Error (Call): ${response.statusCode} - ${response.body}';
         });
-        print('Failed to get AI response for call: ${response.statusCode} - ${response.body}');
       }
     } on TimeoutException catch (e) {
       setState(() {
         _aiResponse = 'AI Connection Timeout (Call): $e';
       });
-      print('Error: HTTP request for call timed out: $e');
     } catch (e) {
       setState(() {
         _aiResponse = 'Generic Error connecting to AI backend for call: $e';
       });
-      print('Generic Error connecting to AI backend for call: $e');
     }
   }
 
@@ -173,14 +158,8 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _lastWhatsAppAIResponse = 'AI is processing WhatsApp message...';
     });
-    print('DEBUG WHATSAPP: Attempting to send WhatsApp message to AI backend...');
     final url = Uri.parse('$_backendBaseUrl/process_whatsapp_message');
-    print('DEBUG WHATSAPP: Target URL: $url');
-
     try {
-      print('DEBUG WHATSAPP: Making HTTP POST request for WhatsApp...');
-      
-      // Revised prompt for more natural, helpful responses
       final prompt = """
 You are an AI assistant for WhatsApp. Your task is to provide a single, concise, and helpful reply to the user's message.
 The reply should directly address the user's message and be appropriate for a WhatsApp chat.
@@ -189,67 +168,54 @@ Just provide the exact text for the WhatsApp message.
 
 User message: "$messageContent"
 Reply:""";
-
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'sender': sender,
           'message_content': messageContent,
-          'prompt': prompt, // Pass the strict prompt to the backend
+          'prompt': prompt,
         }),
-      ).timeout(const Duration(seconds: 60)); // Increased timeout to 60 seconds
-
-      print('DEBUG WHATSAPP: HTTP POST request completed. Status Code: ${response.statusCode}');
-
+      ).timeout(const Duration(seconds: 60));
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final String aiResponseText = data['ai_response'];
         setState(() {
           _lastWhatsAppAIResponse = 'AI says (WhatsApp): "$aiResponseText"';
         });
-        print('AI Response for WhatsApp: $aiResponseText');
-        // Trigger auto-reply here
-        _triggerWhatsAppReply(sender, aiResponseText); // Pass both sender and AI response
+        _triggerWhatsAppReply(sender, aiResponseText);
       } else {
         setState(() {
           _lastWhatsAppAIResponse = 'AI Error (WhatsApp): ${response.statusCode} - ${response.body}';
         });
-        print('Failed to get AI response for WhatsApp: ${response.statusCode} - ${response.body}');
       }
     } on TimeoutException catch (e) {
       setState(() {
         _lastWhatsAppAIResponse = 'AI Connection Timeout (WhatsApp): $e';
       });
-      print('Error: HTTP request for WhatsApp timed out: $e');
     } catch (e) {
       setState(() {
         _lastWhatsAppAIResponse = 'Generic Error connecting to AI backend for WhatsApp: $e';
       });
-      print('Generic Error connecting to AI backend for WhatsApp: $e');
     }
   }
 
-  // --- Call Detection Logic (Modified to integrate STT/TTS/AI) ---
+  // --- Call Detection Logic ---
   Future<void> _requestPhonePermission() async {
     final status = await Permission.phone.request();
     if (status.isGranted) {
       setState(() {
         _callStatus = "Phone permission granted. Waiting for calls...";
       });
-      print("READ_PHONE_STATE permission granted.");
     } else if (status.isDenied) {
       setState(() {
         _callStatus = "Phone permission denied. Call detection will not work.";
       });
-      print("READ_PHONE_STATE permission denied.");
     } else if (status.isPermanentlyDenied) {
       setState(() {
         _callStatus = "Phone permission permanently denied. Please enable from settings.";
       });
-      print("READ_PHONE_STATE permission permanently denied. Opening app settings.");
-      // Corrected call to openAppSettings
-      openAppSettings(); 
+      openAppSettings();
     }
   }
 
@@ -261,13 +227,9 @@ Reply:""";
           setState(() {
             _callStatus = "Incoming call from: $incomingNumber";
           });
-          print("Flutter received incoming call from: $incomingNumber");
-          // *** AI Call Response Logic triggered here ***
-          // When a call comes in, speak a greeting and then start listening
           _speak("Hello, this is your AI assistant. How can I help you?");
-          // Give TTS a moment to start speaking before STT starts listening
-          Future.delayed(const Duration(seconds: 3), () { // Added const
-            _startListening(); // Start listening after greeting
+          Future.delayed(const Duration(seconds: 3), () {
+            _startListening();
           });
         }
       } else {
@@ -277,22 +239,19 @@ Reply:""";
         );
       }
     });
-    print("MethodChannel listener for 'com.example.secretary/call_state' set up.");
   }
 
-  // --- WhatsApp Message Detection Logic (Modified to integrate AI) ---
+  // --- WhatsApp Message Detection Logic ---
   Future<void> _checkAndRequestNotificationAccess() async {
     bool hasAccess = await NotificationListenerService.isPermissionGranted();
     if (hasAccess) {
       setState(() {
         _whatsappStatus = "Notification access granted.";
       });
-      print("Notification access granted.");
     } else {
       setState(() {
         _whatsappStatus = "Notification access denied. Please grant it.";
       });
-      print("Notification access denied. Prompting user.");
       await NotificationListenerService.requestPermission();
       hasAccess = await NotificationListenerService.isPermissionGranted();
       if (hasAccess) {
@@ -309,16 +268,11 @@ Reply:""";
         final Map<dynamic, dynamic>? messageData = call.arguments;
         if (messageData != null && messageData.containsKey("sender") && messageData.containsKey("message")) {
           final String sender = messageData["sender"] as String;
-          // Direct cast as Kotlin should now be cleaning the message content
-          final String messageContent = messageData["message"] as String; 
-
+          final String messageContent = messageData["message"] as String;
           setState(() {
             _lastWhatsAppMessage = "From: $sender\nMessage: $messageContent";
             _whatsappStatus = "New WhatsApp message detected!";
           });
-          
-          print("Flutter received WhatsApp message: From=$sender, Message='$messageContent'"); // Cleaned log
-
           _sendWhatsAppMessageToAI(sender, messageContent);
         }
       } else {
@@ -328,7 +282,6 @@ Reply:""";
         );
       }
     });
-    print("MethodChannel listener for 'com.example.secretary/whatsapp_messages' set up.");
   }
 
   // --- Accessibility Service Method Channel for WhatsApp Reply ---
@@ -340,7 +293,6 @@ Reply:""";
           setState(() {
             _whatsappReplyStatus = "WhatsApp Reply Status: $status";
           });
-          print("Flutter received WhatsApp Reply Status: $status");
         }
       } else {
         throw PlatformException(
@@ -349,7 +301,6 @@ Reply:""";
         );
       }
     });
-    print("MethodChannel listener for 'com.example.secretary/accessibility_service' set up.");
   }
 
   // --- Trigger WhatsApp Reply from Flutter ---
@@ -359,15 +310,12 @@ Reply:""";
     });
     try {
       await _accessibilityMethodChannel.invokeMethod('sendWhatsAppReply', {'sender': sender, 'message': replyMessage});
-      print("Invoked native method to send WhatsApp reply: $replyMessage");
     } on PlatformException catch (e) {
       setState(() {
         _whatsappReplyStatus = "Failed to send WhatsApp reply: ${e.message}";
       });
-      print("Failed to invoke native method to send WhatsApp reply: ${e.message}");
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -387,7 +335,7 @@ Reply:""";
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // --- Call Detection Section ---
+                  // Call Detection Section
                   const Icon(Icons.phone_android, size: 80, color: Colors.blueAccent),
                   const SizedBox(height: 20),
                   const Text(
@@ -417,9 +365,8 @@ Reply:""";
                       elevation: 5,
                     ),
                   ),
-                  const SizedBox(height: 40), // Spacer between sections
-
-                  // --- STT/TTS/AI Interaction Section (for Call) ---
+                  const SizedBox(height: 40),
+                  // STT/TTS/AI Interaction Section (for Call)
                   const Icon(Icons.mic, size: 80, color: Colors.redAccent),
                   const SizedBox(height: 20),
                   const Text(
@@ -435,7 +382,7 @@ Reply:""";
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    _aiResponse, // This is for call-related AI responses
+                    _aiResponse,
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 18, color: Colors.blueGrey, fontStyle: FontStyle.italic),
                   ),
@@ -466,10 +413,8 @@ Reply:""";
                       ),
                     ],
                   ),
-                  const SizedBox(height: 40), // Spacer between sections
-
-
-                  // --- WhatsApp Detection Section ---
+                  const SizedBox(height: 40),
+                  // WhatsApp Detection Section
                   const Icon(Icons.message, size: 80, color: Colors.green),
                   const SizedBox(height: 20),
                   const Text(
@@ -489,15 +434,15 @@ Reply:""";
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
                   ),
-                  const SizedBox(height: 10), // Added spacing
+                  const SizedBox(height: 10),
                   Text(
-                    _lastWhatsAppAIResponse, // Display AI response for WhatsApp here
+                    _lastWhatsAppAIResponse,
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 18, color: Colors.purple, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 10), // Added spacing for reply status
+                  const SizedBox(height: 10),
                   Text(
-                    _whatsappReplyStatus, // Display WhatsApp auto-reply status
+                    _whatsappReplyStatus,
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 16, color: Colors.blueGrey),
                   ),
@@ -518,7 +463,7 @@ Reply:""";
                       backgroundColor: Colors.green,
                     ),
                   ),
-                  const SizedBox(height: 20), // Extra space at bottom
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
